@@ -1,0 +1,86 @@
+# Main activity.kt
+
+package com.example.accidentdetector
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.location.Location
+import android.os.Bundle
+import android.telephony.SmsManager
+import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import com.google.android.gms.location.LocationServices
+
+class MainActivity : AppCompatActivity(), SensorEventListener {
+    private lateinit var sensorManager: SensorManager
+    private var accel: Sensor? = null
+    private lateinit var tvStatus: TextView
+    private val PERMS = arrayOf(Manifest.permission.SEND_SMS, Manifest.permission.ACCESS_FINE_LOCATION)
+    private var lastAccel = 0f
+    private var lastUpdate = 0L
+    private val THRESHOLD = 30f  // tune this value; high = less sensitive
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        tvStatus = findViewById(R.id.tvStatus)
+        sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
+        accel = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        if (!hasPermissions()) ActivityCompat.requestPermissions(this, PERMS, 101)
+    }
+
+    private fun hasPermissions(): Boolean {
+        for (p in PERMS) if (ActivityCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) return false
+        return true
+    }
+
+    override fun onResume() {
+        super.onResume()
+        sensorManager.registerListener(this, accel, SensorManager.SENSOR_DELAY_NORMAL)
+    }
+    override fun onPause() {
+        super.onPause()
+        sensorManager.unregisterListener(this)
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    override fun onSensorChanged(event: SensorEvent?) {
+        val x = event!!.values[0]
+        val y = event.values[1]
+        val z = event.values[2]
+        val accelValue = Math.sqrt((x*x + y*y + z*z).toDouble()).toFloat()
+        val now = System.currentTimeMillis()
+        if (lastUpdate == 0L) {
+            lastUpdate = now
+            lastAccel = accelValue
+            return
+        }
+        val delta = Math.abs(accelValue - lastAccel)
+        lastAccel = accelValue
+        if (delta > THRESHOLD) {
+            tvStatus.text = "Possible accident detected (Δ=${delta})"
+            triggerAlert()
+        }
+    }
+
+    private fun triggerAlert() {
+        if (!hasPermissions()) return
+        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
+            val loc = if (location != null) "https://www.google.com/maps/?q=${location.latitude},${location.longitude}" else "Location not available"
+            val msg = "Accident detected! Please help. Location: $loc"
+            val number = "EMERGENCY_CONTACT" // replace
+            try {
+                val sms = SmsManager.getDefault()
+                sms.sendTextMessage(number, null, msg, null, null)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+}
