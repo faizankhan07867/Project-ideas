@@ -1,0 +1,66 @@
+// File: GarbageMonitor.ino
+#include <ESP8266WiFi.h>
+#include <FirebaseESP8266.h>
+
+#define WIFI_SSID "YOUR_WIFI_SSID"
+#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+
+#define FIREBASE_HOST "your-project.firebaseio.com"  // without https://
+#define FIREBASE_AUTH "YOUR_FIREBASE_DATABASE_SECRET_OR_AUTH_TOKEN"
+
+#define TRIG_PIN D1
+#define ECHO_PIN D2
+#define BIN_HEIGHT_CM 30  // adjust to physical bin height
+
+FirebaseData fbdo;
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(400);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected to WiFi");
+
+  Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
+  Firebase.reconnectWiFi(true);
+}
+
+long readDistanceCM() {
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+  long duration = pulseIn(ECHO_PIN, HIGH, 30000); // timeout 30ms
+  if (duration == 0) return BIN_HEIGHT_CM; // assume empty/no echo
+  long distanceCm = duration * 0.034 / 2;
+  return distanceCm;
+}
+
+void loop() {
+  long distance = readDistanceCM();
+  long fillPercent = ((BIN_HEIGHT_CM - distance) * 100) / BIN_HEIGHT_CM;
+  if (fillPercent < 0) fillPercent = 0;
+  if (fillPercent > 100) fillPercent = 100;
+
+  Serial.printf("Distance: %ld cm, Fill: %ld %%\n", distance, fillPercent);
+
+  // upload to firebase
+  if (!Firebase.setInt(fbdo, "/dustbin/fill_percent", (int)fillPercent)) {
+    Serial.println("Firebase setInt failed.");
+    // optionally: Serial.println(fbdo.errorReason());
+  }
+  if (fillPercent >= 80) {
+    Firebase.setString(fbdo, "/dustbin/status", "FULL");
+  } else {
+    Firebase.setString(fbdo, "/dustbin/status", "OK");
+  }
+
+  delay(5000); // 5 seconds between reads
+}
