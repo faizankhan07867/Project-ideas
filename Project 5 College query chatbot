@@ -1,0 +1,77 @@
+# Bash installer
+
+pip install flask
+
+
+#Source code:-
+
+# File: app.py
+from flask import Flask, request, jsonify, render_template
+import re
+
+app = Flask(__name__)
+
+FAQ = {
+    "exam date": "Exams will start from 15 December 2025. Check official noticeboard for updates.",
+    "fees": "Semester tuition fee is ₹45000. Contact accounts office for concession.",
+    "syllabus": "Visit the syllabus page on university site or request course name for details.",
+    "hostel": "Hostel application forms are available on the student portal."
+}
+
+def simple_normalize(q):
+    q = q.lower()
+    q = re.sub(r'[^a-z0-9 ]', '', q)
+    return q
+
+def find_answer(q):
+    qn = simple_normalize(q)
+    for key in FAQ:
+        if key in qn:
+            return FAQ[key]
+    # fallback short heuristics
+    if "exam" in qn: return FAQ.get("exam date")
+    if "fee" in qn or "fees" in qn: return FAQ.get("fees")
+    return "Sorry, I don't know. Please contact helpdesk@college.edu"
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+@app.route("/ask", methods=["POST"])
+def ask():
+    data = request.json
+    q = data.get("q","")
+    ans = find_answer(q)
+    return jsonify({"answer": ans})
+
+if __name__ == "__main__":
+    app.run(debug=True)
+
+
+
+#templets/index.html
+
+
+<!doctype html>
+<html>
+  <head><title>College Bot</title></head>
+  <body>
+    <h2>College Query Chatbot</h2>
+    <input id="q" placeholder="Ask a question" style="width:60%">
+    <button onclick="ask()">Ask</button>
+    <p id="ans"></p>
+
+    <script>
+      async function ask(){
+        let q = document.getElementById('q').value;
+        let res = await fetch('/ask', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({q:q})
+        });
+        let data = await res.json();
+        document.getElementById('ans').innerText = data.answer;
+      }
+    </script>
+  </body>
+</html>
