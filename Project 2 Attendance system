@@ -1,0 +1,102 @@
+#Base of code
+
+pip install opencv-python face_recognition numpy
+
+
+#Source code:- Train encoding.py
+
+# File: train_encodings.py
+import os
+import face_recognition
+import pickle
+import cv2
+
+DATA_DIR = "faces"  # put images as faces/John.jpg faces/Alice.jpg ...
+ENCODINGS_FILE = "encodings.pkl"
+
+def build_encodings():
+    encodings = {}
+    for fname in os.listdir(DATA_DIR):
+        path = os.path.join(DATA_DIR, fname)
+        name, _ = os.path.splitext(fname)
+        img = cv2.imread(path)
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        boxes = face_recognition.face_locations(rgb)
+        if len(boxes) == 0:
+            print(f"No face found in {path}, skipping")
+            continue
+        enc = face_recognition.face_encodings(rgb, boxes)[0]
+        encodings[name] = enc
+        print(f"Encoded {name}")
+    with open(ENCODINGS_FILE, "wb") as f:
+        pickle.dump(encodings, f)
+    print("Encodings saved.")
+
+if __name__ == "__main__":
+    build_encodings()
+
+
+#Attendence app.py
+
+
+# File: attendance_app.py
+import cv2
+import face_recognition
+import pickle
+import numpy as np
+import csv
+from datetime import datetime
+
+ENCODINGS_FILE = "encodings.pkl"
+OUTPUT_CSV = "attendance.csv"
+TOLERANCE = 0.5  # smaller = stricter
+
+with open(ENCODINGS_FILE, "rb") as f:
+    known = pickle.load(f)  # dict name->encoding
+
+known_names = list(known.keys())
+known_encodings = np.array(list(known.values()))
+
+cap = cv2.VideoCapture(0)
+attendance = set()
+
+def mark_attendance(name):
+    if name in attendance:
+        return
+    attendance.add(name)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(OUTPUT_CSV, "a", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([name, now])
+    print(f"Marked {name} at {now}")
+
+while True:
+    ret, frame = cap.read()
+    if not ret: break
+    small = cv2.resize(frame, (0,0), fx=0.5, fy=0.5)
+    rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+    boxes = face_recognition.face_locations(rgb)
+    encs = face_recognition.face_encodings(rgb, boxes)
+
+    for enc, box in zip(encs, boxes):
+        matches = face_recognition.compare_faces(known_encodings, enc, tolerance=TOLERANCE)
+        face_dist = face_recognition.face_distance(known_encodings, enc)
+        if matches and any(matches):
+            best_idx = np.argmin(face_dist)
+            name = known_names[best_idx]
+            mark_attendance(name)
+            # draw box & name on original frame (scale up)
+            top, right, bottom, left = [v*2 for v in box]
+            cv2.rectangle(frame, (left, top), (right, bottom), (0,255,0), 2)
+            cv2.putText(frame, name, (left, top-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
+        else:
+            top, right, bottom, left = [v*2 for v in box]
+            cv2.rectangle(frame, (left, top), (right, bottom), (0,0,255), 2)
+            cv2.putText(frame, "Unknown", (left, top-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,255), 2)
+
+    cv2.imshow("Attendance", frame)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
