@@ -1,0 +1,124 @@
+#Android manifest.xml
+
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.sosapp">
+
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
+    <application
+        android:allowBackup="true"
+        android:label="@string/app_name">
+        <activity android:name=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+
+
+
+#Activity main.xml
+
+
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:gravity="center"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <TextView android:id="@+id/tvStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="SOS App - Shake Phone to Send Alert"
+        android:textSize="18sp"/>
+
+    <Button android:id="@+id/btnSend"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Send Test SOS" />
+</LinearLayout>
+
+
+
+
+#Main activity.kt
+
+
+
+// File: MainActivity.kt
+package com.example.sosapp
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.location.Location
+import android.os.Bundle
+import android.telephony.SmsManager
+import android.widget.Button
+import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import com.google.android.gms.location.*
+
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var tvStatus: TextView
+    private lateinit var btnSend: Button
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private val PERMS = arrayOf(Manifest.permission.SEND_SMS, Manifest.permission.ACCESS_FINE_LOCATION)
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        tvStatus = findViewById(R.id.tvStatus)
+        btnSend = findViewById(R.id.btnSend)
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
+        if (!hasPermissions()) ActivityCompat.requestPermissions(this, PERMS, 101)
+
+        btnSend.setOnClickListener {
+            sendSOS()
+        }
+
+        // Optional: implement accelerometer listener to detect shake for real SOS
+    }
+
+    private fun hasPermissions(): Boolean {
+        for (p in PERMS) {
+            if (ActivityCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) return false
+        }
+        return true
+    }
+
+    private fun sendSOS() {
+        if (!hasPermissions()) {
+            tvStatus.text = "Permissions required"
+            ActivityCompat.requestPermissions(this, PERMS, 102)
+            return
+        }
+        fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
+            val locStr = if (location != null) {
+                "https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}"
+            } else "Location not available"
+
+            val message = "SOS! I need help. My location: $locStr"
+            val phoneNumber = "RECIPIENT_PHONE_NUMBER" // replace with saved emergency contact
+            try {
+                val smsManager = SmsManager.getDefault()
+                smsManager.sendTextMessage(phoneNumber, null, message, null, null)
+                tvStatus.text = "SOS Sent to $phoneNumber"
+            } catch (e: Exception) {
+                tvStatus.text = "SMS Failed: ${e.message}"
+            }
+        }
+    }
+}
+
+
+
