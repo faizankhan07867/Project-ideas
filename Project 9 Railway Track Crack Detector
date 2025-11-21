@@ -1,0 +1,27 @@
+// File: TrackCrackDetector.ino
+#define IR_PIN A0   // analog or digital depending on sensor
+#define BUZZER 8
+#define LED 9
+
+void setup() {
+  pinMode(BUZZER, OUTPUT);
+  pinMode(LED, OUTPUT);
+  pinMode(IR_PIN, INPUT);
+  Serial.begin(9600);
+}
+
+void loop() {
+  int val = analogRead(IR_PIN); // lower when crack (less reflection)
+  Serial.println(val);
+  // threshold depends on calibration
+  if (val < 300) {
+    digitalWrite(LED, HIGH);
+    tone(BUZZER, 1000);
+    Serial.println("Crack Detected!");
+    // optionally send location via GSM/GPS
+  } else {
+    digitalWrite(LED, LOW);
+    noTone(BUZZER);
+  }
+  delay(200);
+}
