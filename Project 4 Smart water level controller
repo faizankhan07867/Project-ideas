@@ -1,0 +1,28 @@
+// File: WaterLevelController.ino
+#define PUMP_PIN 8
+#define SENSOR_LOW_PIN 2   // float switch for low-level
+#define SENSOR_HIGH_PIN 3  // float switch for high-level
+
+void setup() {
+  pinMode(PUMP_PIN, OUTPUT);
+  pinMode(SENSOR_LOW_PIN, INPUT_PULLUP);
+  pinMode(SENSOR_HIGH_PIN, INPUT_PULLUP);
+  Serial.begin(9600);
+}
+
+void loop() {
+  bool low = digitalRead(SENSOR_LOW_PIN) == LOW;   // adjust based on wiring
+  bool high = digitalRead(SENSOR_HIGH_PIN) == LOW;
+
+  Serial.print("Low: "); Serial.print(low);
+  Serial.print(" High: "); Serial.println(high);
+
+  if (low && !high) {
+    // Tank is low but not full -> start pump
+    digitalWrite(PUMP_PIN, HIGH);
+  } else if (high) {
+    // Tank full -> stop pump
+    digitalWrite(PUMP_PIN, LOW);
+  }
+  delay(1000);
+}
