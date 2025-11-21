@@ -1,0 +1,62 @@
+# Base installer part
+
+
+pip install pdfminer.six nltk scikit-learn spacy
+python -m spacy download en_core_web_sm
+
+
+#Source code:-
+
+# File: resume_analyzer.py
+import sys
+import re
+from pdfminer.high_level import extract_text
+from sklearn.feature_extraction.text import TfidfVectorizer
+import nltk
+nltk.download('stopwords')
+from nltk.corpus import stopwords
+
+KEY_SKILLS = ["python", "java", "c++", "machine learning", "data science", "sql", "html", "css", "javascript",
+              "django", "flask", "react", "node", "tensorflow", "pytorch", "git"]
+
+def extract_resume_text(path):
+    text = extract_text(path)
+    return text.lower()
+
+def keyword_score(text):
+    score = 0
+    found = []
+    for k in KEY_SKILLS:
+        if k in text:
+            score += 1
+            found.append(k)
+    return score, found
+
+def length_score(text):
+    words = re.findall(r'\w+', text)
+    return min(len(words)/200.0, 1.0)  # normalized
+
+def tfidf_quality(text):
+    # naive: compare tfidf magnitude
+    vect = TfidfVectorizer(stop_words='english')
+    X = vect.fit_transform([text])
+    return float(X.sum())
+
+def analyze(path):
+    text = extract_resume_text(path)
+    ks, found = keyword_score(text)
+    ls = length_score(text)
+    tf = tfidf_quality(text)
+    # combine scores
+    final = ks*2 + ls*5 + tf*0.5
+    print("Keywords found:", found)
+    print("Keyword score:", ks)
+    print("Length score:", round(ls,2))
+    print("TFIDF score:", round(tf,2))
+    print("Final score (out of approx):", round(final,2))
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python resume_analyzer.py resume.pdf")
+        sys.exit(1)
+    analyze(sys.argv[1])
